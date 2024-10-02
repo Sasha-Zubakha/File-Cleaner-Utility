@@ -15,7 +15,7 @@ The File Cleaner Utility is a cross-platform program that can be used on various
 
 1. Clone the repository or download the project file:
     ```bash
-    git clone https://github.com/yourusername/cleaner-utility.git
+    git clone https://github.com/Sasha-Zubakha/File-Cleaner-Utility
     ```
 
 2. Make sure you have Python 3 installed.
