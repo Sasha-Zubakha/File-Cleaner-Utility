@@ -22,7 +22,7 @@ The File Cleaner Utility is a cross-platform program that can be used on various
 
 ## Usage
 
-### On Linux:
+### On Linux and macOS:
 
 1. Open the terminal and navigate to the directory with the program:
     ```bash
@@ -58,7 +58,8 @@ The File Cleaner Utility is a cross-platform program that can be used on various
 ## Settings
 
 - The program stores settings such as directory paths, file size filters, and sorting preferences in a JSON file.
-- Files are saved in the program directory where the program is launched.
+- In Windows, the program files are stored in the path: `C:\Users\Username\Documents\Cleaner`
+- On Linux and macOS, the program files are stored at: `~/.config/Cleaner`
 - These settings can be modified within the program.
 
 ## License
