@@ -15,8 +15,8 @@
 #    limitations under the License.
 
 import os
-from sys import argv
 from re import search
+from pathlib import Path
 from copy import deepcopy
 from platform import system
 from json import dump, loads
@@ -31,7 +31,7 @@ def main():
                         'filter_by_size': False, 'indicator_output': False, 
                         'cleaned_files_report': False}
 
-    settings_path = f'{os.path.dirname(argv[0])}/settings.json'
+    settings_path = get_config_path('settings.json')
 
     boolean = greeting(settings_path)
 
@@ -123,6 +123,26 @@ def main():
         post_cleanup_actions(boolean, list_of_files, total_size, display_stats, s)
 
     restart_script()
+
+def get_config_path(file_name):
+    user_home = Path.home()
+    os_name = system()
+
+    if os_name == 'Linux':
+        config_dir = user_home / '.config' / 'Cleaner'
+    else:
+        config_dir = user_home / 'Documents' / 'Cleaner'
+
+    config_path = config_dir / file_name
+
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        print(f'\nAccess to the following directory was denied: \n{user_home}')
+        print('\nChange the permissions for this directory and restart the program.')
+        exit()
+
+    return config_path
 
 def greeting(settings_path):
     text = '''Welcome to the Program!\n
@@ -261,8 +281,7 @@ def saving_settings(settings_path, settings):
                 return False
         except PermissionError:
             print('Error! Failed to save settings!')
-            print('\nTo save the settings, restart the program with super rights.')
-            print('You can also try changing the location of the program.')
+            print('Check file and directory permissions and restart the program.')
             exit()
     else:
         print('The settings were not saved.')
@@ -602,7 +621,7 @@ def show_file_statistics(settings):
             return False
 
 def get_default_settings(settings):
-    data_path = f'{os.path.dirname(argv[0])}/data.json'
+    data_path = get_config_path('data.json')
     boolean = False
 
     act = input('\nIf you want to return the settings to default, then write "Yes": ')
@@ -1000,7 +1019,7 @@ def save_and_display_cleanup_info(total_files, total_size, display_stats):
                     'number_of_deleted_files': 0,
                     'total_weight_of_deleted_files': 0}
 
-    data_path = f'{os.path.dirname(argv[0])}/data.json'
+    data_path = get_config_path('data.json')
     data = check_data(*get_json_content(data_path, default_data))
 
     if data['date_of_first_deletion'] == '0001-01-01':
@@ -1079,11 +1098,11 @@ def saving_data(data_path, data):
             return True
     except PermissionError:
         print('\nError! Failed to save statistics data!')
-        print('You can try to change the location of the program.')
+        print('Check file and directory permissions.')
         return False
 
 def saving_history_of_deleted_files(current_date_and_time, deleted_files, not_deleted_files, s):
-    history_of_deleted_files = f'{os.path.dirname(argv[0])}/History of deleted files.txt'
+    history_of_deleted_files = get_config_path('History of deleted files.txt')
     sorted_extensions, count_of_extensions = get_file_extensions(deleted_files)
     total_files = len(deleted_files) + len(not_deleted_files)
 
@@ -1110,7 +1129,7 @@ def saving_history_of_deleted_files(current_date_and_time, deleted_files, not_de
                 print('The history of deleted files was successfully saved in the program directory.')
         except PermissionError:
             print('Error! Failed to save history of deleted files.\n')
-            print('You can try to change the location of the program.')
+            print('Check file and directory permissions.')
     else:
         print('The history of deleted files was not saved.')
 
