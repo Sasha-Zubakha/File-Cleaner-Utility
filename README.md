@@ -20,6 +20,8 @@ The File Cleaner Utility is a cross-platform program that can be used on various
 
 2. Make sure you have Python 3 installed.
 
+3. You can also download the executable **.exe** file from the **releases** and run it (Windows only. Python 3 does not need to be installed).
+
 ## Usage
 
 ### On Linux and macOS:
