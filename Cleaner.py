@@ -15,18 +15,29 @@
 #    limitations under the License.
 
 import os
+import logging
+from sys import argv
 from re import search
 from pathlib import Path
 from copy import deepcopy
-from platform import system
 from json import dump, loads
 from time import perf_counter
 from shutil import copy, move
 from collections import Counter
 from datetime import datetime, date
+from platform import platform, system
 from json.decoder import JSONDecodeError
 
 def main():
+    info_log = get_config_path('info.log')
+
+    logging.basicConfig(filename=info_log, filemode='w', level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
+    logging.info('The program started working.')
+
+    log_system_info()
+
     default_settings = {'paths': [], 'sorting': False, 'output_files': False,
                         'filter_by_size': False, 'indicator_output': False, 
                         'cleaned_files_report': False}
@@ -102,10 +113,10 @@ def main():
         post_cleanup_actions(boolean, list_of_files, total_size, display_stats, s)
 
     elif choice == '2':
-        folders = select_folders(paths)
+        dirs = select_directories(paths)
         file_formats, inversion = input_file_format()
 
-        for i in folders:
+        for i in dirs:
             path = paths[int(i)-1]
             total = get_all_files(path, file_formats, inversion, filter_by_size, s)
             directory = get_directories_size(path, max_length, total[0])
@@ -140,9 +151,16 @@ def get_config_path(file_name):
     except PermissionError:
         print(f'\nAccess to the following directory was denied: \n{user_home}')
         print('\nChange the permissions for this directory and restart the program.')
+        logging.critical('Error while trying to access user\'s home directory!')
         exit()
 
     return config_path
+
+def log_system_info():
+    os_info = platform()
+    working_directory = os.path.dirname(argv[0])
+    logging.info(f'OS: {os_info}')
+    logging.info(f'Working directory: {working_directory}')
 
 def greeting(settings_path):
     text = '''Welcome to the Program!\n
@@ -282,6 +300,7 @@ def saving_settings(settings_path, settings):
         except PermissionError:
             print('Error! Failed to save settings!')
             print('Check file and directory permissions and restart the program.')
+            logging.critical('Error saving program settings!')
             exit()
     else:
         print('The settings were not saved.')
@@ -670,6 +689,7 @@ def restart_script():
         error_handler(main)
     else:
         print('The program has completed its work.')
+        logging.info('The program stopped working.')
         exit()
 
 def error_handler(main):
@@ -677,6 +697,7 @@ def error_handler(main):
         main()
     except (EOFError, KeyboardInterrupt):
         print('\nYou terminated the program using a key combination.')
+        logging.info('The program stopped working.')
         exit()
 
 def checking_paths_for_correctness(settings, settings_path):
@@ -975,12 +996,12 @@ def files_cleanup_time(start_time, end_time):
         minutes, seconds = execution_time // 60, execution_time % 60
         print(f'- The files were cleared in {minutes} minutes and {seconds} seconds.')
 
-def select_folders(paths):
+def select_directories(paths):
     while True:
-        folders = input('\nWrite the numbers of the above folders separated by a space: ').split()
-        if all(el.isdigit() and 1 <= int(el) <= len(paths) for el in folders) and len(folders) != 0:
-            folders = list(set(folders))
-            return folders
+        dirs = input('\nWrite the numbers of the specified directories separated by spaces: ').split()
+        if all(el.isdigit() and 1 <= int(el) <= len(paths) for el in dirs) and len(dirs) != 0:
+            dirs = list(set(dirs))
+            return dirs
         else:
             print(f'Please enter only numbers from 1 to {len(paths)}.')
 
@@ -1099,6 +1120,7 @@ def saving_data(data_path, data):
     except PermissionError:
         print('\nError! Failed to save statistics data!')
         print('Check file and directory permissions.')
+        logging.error('Error saving program data.')
         return False
 
 def saving_history_of_deleted_files(current_date_and_time, deleted_files, not_deleted_files, s):
@@ -1126,10 +1148,12 @@ def saving_history_of_deleted_files(current_date_and_time, deleted_files, not_de
                     for i, extension in enumerate(sorted_extensions, 1):
                         file.write(f'{i}.) {extension}: {count_of_extensions[extension]}\n')
 
-                print('The history of deleted files was successfully saved in the program directory.')
+                print('\nThe history of deleted files has been successfully saved to the following path:')
+                print(history_of_deleted_files)
         except PermissionError:
             print('Error! Failed to save history of deleted files.\n')
             print('Check file and directory permissions.')
+            logging.error('Error saving history of deleted files.')
     else:
         print('The history of deleted files was not saved.')
 
