@@ -23,10 +23,12 @@ from copy import deepcopy
 from json import dump, loads
 from time import perf_counter
 from shutil import copy, move
+from functools import partial
 from collections import Counter
 from datetime import datetime, date
 from platform import platform, system
 from json.decoder import JSONDecodeError
+from concurrent.futures import ProcessPoolExecutor
 
 def main():
     info_log = get_config_path('info.log')
@@ -39,8 +41,8 @@ def main():
     log_system_info()
 
     default_settings = {'paths': [], 'sorting': False, 'output_files': False,
-                        'filter_by_size': False, 'indicator_output': False, 
-                        'cleaned_files_report': False}
+                        'output_extensions': False, 'filter_by_size': False,
+                        'indicator_output': False, 'cleaned_files_report': False}
 
     settings_path = get_config_path('settings.json')
 
@@ -63,6 +65,7 @@ def main():
     settings = check_settings(*get_json_content(settings_path, default_settings))
     paths = settings['paths']
     output_files = settings['output_files']
+    output_extensions = settings['output_extensions']
     sorting = settings['sorting']
     filter_by_size = settings['filter_by_size']
     indicator_output = settings['indicator_output']
@@ -71,7 +74,8 @@ def main():
     checking_paths_for_correctness(settings, settings_path)
 
     max_length = max([len(el) for el in paths])
-    s = '\\' if system() == 'Windows' else '/'
+    os_name = system()
+    s = '\\' if os_name == 'Windows' else '/'
     list_of_selected_paths = []
     list_of_directories = []
     files_and_size = []
@@ -98,14 +102,18 @@ def main():
         list_of_selected_paths = paths
 
         for path in paths:
-            total = get_all_files(path, file_formats, inversion, filter_by_size, s)
+            if os_name != 'Windows':
+                total = get_all_files(path, file_formats, inversion, filter_by_size, s)
+            else:
+                total = get_all_files_windows(path, file_formats, inversion, filter_by_size, s)
             directory = get_directories_size(path, max_length, total[0])
             list_of_directories.append(directory)
             files_and_size.extend(total[1])
             list_of_files.extend(total[2])
             total_size += total[0]
 
-        information_output(files_and_size, list_of_files, list_of_directories, total_size, output_files, sorting)
+        information_output(files_and_size, list_of_files, list_of_directories, total_size,
+                           output_files, output_extensions, sorting)
 
         boolean = execute_the_selected_option(list_of_files, list_of_selected_paths, paths,
                                               output_files, indicator_output, s)
@@ -118,7 +126,10 @@ def main():
 
         for i in dirs:
             path = paths[int(i)-1]
-            total = get_all_files(path, file_formats, inversion, filter_by_size, s)
+            if os_name != 'Windows':
+                total = get_all_files(path, file_formats, inversion, filter_by_size, s)
+            else:
+                total = get_all_files_windows(path, file_formats, inversion, filter_by_size, s)
             directory = get_directories_size(path, max_length, total[0])
             list_of_directories.append(directory)
             list_of_selected_paths.append(path)
@@ -126,7 +137,8 @@ def main():
             list_of_files.extend(total[2])
             total_size += total[0]
 
-        information_output(files_and_size, list_of_files, list_of_directories, total_size, output_files, sorting)
+        information_output(files_and_size, list_of_files, list_of_directories, total_size,
+                           output_files, output_extensions, sorting)
 
         boolean = execute_the_selected_option(list_of_files, list_of_selected_paths, paths,
                                               output_files, indicator_output, s)
@@ -185,7 +197,8 @@ Not all features of the program are described here.'''
 
 def select_option(settings_path, default_settings):
     options = {1: change_paths, 2: change_files_sorting, 3: files_output_mode,
-               4: filter_mode_by_size, 5: indicator_output_selection, 6: show_file_statistics}
+               4: extensions_output_mode, 5: filter_mode_by_size, 6: indicator_output_selection,
+               7: show_file_statistics}
 
     settings = check_settings(*get_json_content(settings_path, default_settings))
 
@@ -201,23 +214,27 @@ def select_option(settings_path, default_settings):
         print('3.) Enable output of a list of directory files.')
     else:
         print('3.) Disable output of a list of directory files.')
-    print('4.) Filter files by size.')
+    if not settings['output_extensions']:
+        print('4.) Enable display of file extension list.')
+    else:
+        print('4.) Disable display of file extension list.')
+    print('5.) Filter files by size.')
     if not settings['indicator_output']:
-        print('5.) Enable operation progress indicator.')
+        print('6.) Enable operation progress indicator.')
     else:
-        print('5.) Turn off the operation progress indicator.')
+        print('6.) Turn off the operation progress indicator.')
     if not settings['cleaned_files_report']:
-        print('6.) Enable the display of detailed statistics about deleted files.')
+        print('7.) Enable the display of detailed statistics about deleted files.')
     else:
-        print('6.) Disable the display of detailed statistics about deleted files.')
+        print('7.) Disable the display of detailed statistics about deleted files.')
 
-    if settings['sorting'] or settings['output_files'] or settings['filter_by_size'] or \
-        settings['indicator_output'] or settings['cleaned_files_report']:
-        options[7] = get_default_settings
-        print('7.) Restore all settings to default.')
-        max_option = 7
+    if settings['sorting'] or settings['output_files'] or settings['output_extensions'] or \
+        settings['filter_by_size'] or settings['indicator_output'] or settings['cleaned_files_report']:
+        options[8] = get_default_settings
+        print('8.) Restore all settings to default.')
+        max_option = 8
     else:
-        max_option = 6
+        max_option = 7
 
     while True:
         try:
@@ -318,10 +335,11 @@ def get_json_content(file_path, default_config):
         return default_config, default_config
 
 def check_settings(settings, default_settings):
-    if len(settings) != 6 or \
+    if len(settings) != 7 or \
         'paths' not in settings or \
         'sorting' not in settings or \
         'output_files' not in settings or \
+        'output_extensions' not in settings or \
         'filter_by_size' not in settings or \
         'indicator_output' not in settings or \
         'cleaned_files_report' not in settings:
@@ -330,6 +348,7 @@ def check_settings(settings, default_settings):
     if not isinstance(settings['paths'], list) or \
         settings['sorting'] not in (False, 'alphabet', 'size') or \
         not isinstance(settings['output_files'], bool) or \
+        not isinstance(settings['output_extensions'], bool) or \
         not isinstance(settings['indicator_output'], bool) or \
         not isinstance(settings['cleaned_files_report'], bool):
         return default_settings
@@ -498,14 +517,37 @@ def files_output_mode(settings):
             return False
     else:
         print('\nYou have disabled the output of directory files.')
-        print('\nWhen you enable this option, you have access to:')
-        print('- Display a list of all found files.')
-        print('- Display a list of all found file extensions.')
 
-        act = input('\nIf you want to enable output of directory files, then write "Yes": ')
+        act = input('If you want to enable output of directory files, then write "Yes": ')
         if act.lower().strip() == 'yes':
             print('You have enabled files output.')
             settings['output_files'] = True
+            return settings
+        else:
+            print('Settings were not saved.')
+            return False
+
+def extensions_output_mode(settings):
+    output_extensions = settings['output_extensions']
+
+    if output_extensions:
+        print('\nYou have file extension display enabled.')
+
+        act = input('If you want to disable the display of file extensions, then type "Yes": ')
+        if act.lower().strip() == 'yes':
+            print('You have disabled the display of file extensions.')
+            settings['output_extensions'] = False
+            return settings
+        else:
+            print('Settings were not saved.')
+            return False
+    else:
+        print('\nYou have file extension display disabled.')
+
+        act = input('If you want to enable the display of file extensions, then type "Yes": ')
+        if act.lower().strip() == 'yes':
+            print('You have enabled the display of file extensions.')
+            settings['output_extensions'] = True
             return settings
         else:
             print('Settings were not saved.')
@@ -647,6 +689,7 @@ def get_default_settings(settings):
     if act.lower().strip() == 'yes':
         settings['sorting'] = False
         settings['output_files'] = False
+        settings['output_extensions'] = False
         settings['filter_by_size'] = False
         settings['indicator_output'] = False
         settings['cleaned_files_report'] = False
@@ -763,7 +806,13 @@ def input_file_format():
 
 def get_file_by_format(file, file_formats, inversion):
     if file_formats != 'all':
-        if file.endswith(file_formats):
+        pattern = r"\.([^./\\]{1,10})$"
+        valid_extension = search(pattern, file)
+        if valid_extension:
+            extension = valid_extension.group(1)
+        else:
+            return False
+        if extension in file_formats:
             boolean = True
         else:
             boolean = False
@@ -774,6 +823,31 @@ def get_file_by_format(file, file_formats, inversion):
         return True
 
 def get_all_files(path, file_formats, inversion, filter_by_size, s):
+    num_cores = os.cpu_count()
+    counter = 0
+    total_size = 0
+    files_and_size = []
+    list_of_full_file_paths = []
+    tasks = [[] for _ in range(num_cores)]
+
+    for root, _, files in os.walk(path):
+        task_number = counter % num_cores
+        counter += 1
+        tasks[task_number].append((root, files))
+
+    get_filtered_files = partial(get_information_about_files, file_formats, inversion, filter_by_size, s)
+
+    with ProcessPoolExecutor(max_workers=num_cores) as executor:
+        data = executor.map(get_filtered_files, tasks)
+
+        for x, y, z in data:
+            total_size += x
+            files_and_size.extend(y)
+            list_of_full_file_paths.extend(z)
+
+    return total_size, files_and_size, list_of_full_file_paths
+
+def get_all_files_windows(path, file_formats, inversion, filter_by_size, s):
     total_size = 0
     files_and_size = []
     list_of_full_file_paths = []
@@ -793,12 +867,36 @@ def get_all_files(path, file_formats, inversion, filter_by_size, s):
 
     return total_size, files_and_size, list_of_full_file_paths
 
+def get_information_about_files(file_formats, inversion, filter_by_size, s, directories_and_files):
+    list_of_full_file_paths = []
+    files_and_size = []
+    total_size = 0
+
+    for directory_and_files in directories_and_files:
+        directory, files = directory_and_files[0], directory_and_files[1]
+        for file in files:
+            full_file_path = os.path.join(directory, file)
+            format_verification = get_file_by_format(full_file_path, file_formats, inversion)
+
+            if format_verification and os.path.exists(full_file_path):
+                file_name = full_file_path.split(s)[-1]
+                file_size = os.path.getsize(full_file_path)
+                if not filter_by_size or filter_by_size[0] <= file_size <= filter_by_size[1]:
+                    total_size += file_size
+                    list_of_full_file_paths.append(full_file_path)
+                    files_and_size.append((file_name, file_size))
+
+    return total_size, files_and_size, list_of_full_file_paths
+
 def get_directories_size(path, length, size):
     space = ' ' * (length - len(path))
     return f'{path}   {space}  {get_size(size)}'
 
-def information_output(files_and_size, list_of_files, list_of_directories, total_size, output_files, sorting):
-    sorted_extensions, count_of_extensions = get_file_extensions(list_of_files)
+def information_output(files_and_size, list_of_files, list_of_directories, total_size,
+                       output_files, output_extensions, sorting):
+
+    if output_extensions:
+        sorted_extensions, count_of_extensions = get_file_extensions(list_of_files)
 
     if len(files_and_size) == 0:
         print('\nFiles were not found in directories.')
@@ -817,7 +915,7 @@ def information_output(files_and_size, list_of_files, list_of_directories, total
             space = ' ' * (120 - len(file_name) + (6 - len(str(i))))
             print(f'{i}.) {file_name}   {space}  {file_size}')
 
-    if len(sorted_extensions) > 0 and output_files:
+    if output_extensions and len(sorted_extensions) > 0:
         print('\nList of all file extensions:')
         for i, extension in enumerate(sorted_extensions, 1):
             print(f'{i}.) {extension}: {count_of_extensions[extension]}')
