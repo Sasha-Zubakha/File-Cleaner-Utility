@@ -267,7 +267,9 @@ def get_paths_for_windows(settings, settings_path):
 
     paths = [f'{system_drive}/Windows/SoftwareDistribution/Download',
              f'{system_drive}/Users/{username}/AppData/Local/Temp',
+             f'{system_drive}/Users/{username}/Downloads',
              f'{system_drive}/Windows/LiveKernelReports',
+             f'{system_drive}/Users/{username}/Pictures',
              f'{system_drive}/Windows/Prefetch',
              f'{system_drive}/Windows/Temp',
              f'{system_drive}/Windows/Logs',
